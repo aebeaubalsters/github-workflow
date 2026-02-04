@@ -1,20 +1,15 @@
 {
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Sid": "CopyObjects",
-            "Effect": "Allow",
-            "Action": [
-                "s3:GetObject",
-                "s3:PutObject",
-                "s3:ListBucket"
-            ],
-            "Resource": [
-                "arn:aws:s3:::firelight-ae*/*",
-                "arn:aws:s3:::firelight-ae*",
-                "arn:aws:s3:::s3force-aec*/*",
-                "arn:aws:s3:::s3force-aec*"
-            ]
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "ec2:*",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "us-west-1"
         }
-    ]
+      }
+    }
+  ]
 }
