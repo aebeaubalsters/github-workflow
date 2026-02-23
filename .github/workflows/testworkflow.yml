@@ -1,18 +1,85 @@
-name: GitHub Actions Demo
-run-name: ${{ github.actor }} is testing out GitHub Actions 🚀
-on: workflow_dispatch  
+#name: GitHub Actions Demo
+#run-name: ${{ github.actor }} is testing out GitHub Actions 🚀
+#on: workflow_dispatch  
+#jobs:
+#  Explore-GitHub-Actions:
+#    runs-on: ubuntu-latest
+#    steps:
+#      - run: echo "🎉 The job was automatically triggered by a ${{ github.event_name }} event."
+#      - run: echo "🐧 This job is now running on a ${{ runner.os }} server hosted by GitHub!"
+#      - run: echo "🔎 The name of your branch is ${{ github.ref }} and your repository is ${{ github.repository }}."
+#      - name: Check out repository code
+#        uses: actions/checkout@v5
+#      - run: echo "💡 The ${{ github.repository }} repository has been cloned to the runner."
+#      - run: echo "🖥️ The workflow is now ready to test your code on the runner."
+#      - name: List files in the repository
+#        run: |
+#          ls -a ${{ github.workspace }}
+#      - run: echo "🍏 This job's status is ${{ job.status }}."
+
+name: Deploy
+
+on:
+  push:
+    branches:
+      - release/**
+      - hotfix/**
+      - patch/**
 jobs:
-  Explore-GitHub-Actions:
+  deploy:
+    permissions: write-all
     runs-on: ubuntu-latest
+    if: (!contains(github.event.head_commit.message, '[skip cd]'))
     steps:
-      - run: echo "🎉 The job was automatically triggered by a ${{ github.event_name }} event."
-      - run: echo "🐧 This job is now running on a ${{ runner.os }} server hosted by GitHub!"
-      - run: echo "🔎 The name of your branch is ${{ github.ref }} and your repository is ${{ github.repository }}."
-      - name: Check out repository code
-        uses: actions/checkout@v5
-      - run: echo "💡 The ${{ github.repository }} repository has been cloned to the runner."
-      - run: echo "🖥️ The workflow is now ready to test your code on the runner."
-      - name: List files in the repository
+      - uses: actions/checkout@v4
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: 'https://registry.npmjs.org'
+      - name: Set ShouldPackage
+        id: shouldPackage
+        run: | # we only want to package when we push to the release, hotfix, or patch branches.
+          echo "##[set-output name=wellShouldWe;]$(if [[ $GITHUB_REF != 'refs/heads/main' && ( $GITHUB_REF == refs/heads/release/* || $GITHUB_REF == refs/heads/hotfix/* || $GITHUB_REF == refs/heads/patch/* ) ]]; then echo true; else echo false; fi)"
+
+      - name: get version
+        id: getVersion
+        if: ${{ steps.shouldPackage.outputs.wellShouldWe }}
+        run: | # pull the version from the name of the branch.
+          echo "##[set-output name=version;]$(
+            majorMinorRev=$(grep -m1 version package.json | awk -F: '{ print $2 }' | sed 's/[", ]//g');
+            runNumber=${{ github.run_number }}
+            echo "$majorMinorRev.$runNumber";
+          )"
+      - name: set release channel
+        id: getReleaseChannel
+        if: ${{ steps.shouldPackage.outputs.wellShouldWe }}
         run: |
-          ls -a ${{ github.workspace }}
-      - run: echo "🍏 This job's status is ${{ job.status }}."
+          echo "##[set-output name=channel;]$(
+            if [[ $GITHUB_REF == refs/heads/release/* ]]; then
+              echo "Default"; 
+            elif [[ $GITHUB_REF == refs/heads/hotfix/* ]]; then
+              echo "Hotfix"; 
+            elif [[ $GITHUB_REF == refs/heads/patch/* ]]; then
+              echo "Patch";   
+            else
+              echo "Default";
+            fi
+          )"
+      - name: zip contents
+        if: ${{ steps.shouldPackage.outputs.wellShouldWe }}
+        run: |
+          zip -r statements.${{ steps.getVersion.outputs.version }}.zip serverless.yml appSettings.json config secrets.dist .serverless node_modules && \
+          cd ..
+      - name: create github release
+        if: ${{ steps.shouldPackage.outputs.wellShouldWe }}
+        uses: softprops/action-gh-release@v1
+        id: create_release
+        with:
+          draft: false
+          prerelease: true
+          name: ${{ steps.getVersion.outputs.version }}
+          tag_name: ${{ steps.getVersion.outputs.version }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          files: |
+            ./.serverless/*
