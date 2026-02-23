@@ -66,11 +66,6 @@ jobs:
               echo "Default";
             fi
           )"
-      - name: zip contents
-        if: ${{ steps.shouldPackage.outputs.wellShouldWe }}
-        run: |
-          zip -r statements.${{ steps.getVersion.outputs.version }}.zip serverless.yml appSettings.json config secrets.dist .serverless node_modules && \
-          cd ..
       - name: create github release
         if: ${{ steps.shouldPackage.outputs.wellShouldWe }}
         uses: softprops/action-gh-release@v1
